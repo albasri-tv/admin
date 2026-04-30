@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>لوحة المسؤول - المباريات</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b1220;--card:rgba(17,24,39,.92);--card2:rgba(15,23,42,.96);--line:rgba(255,255,255,.10);--text:#fff;--muted:#cbd5e1;--blue:#38bdf8;--green:#10b981;--red:#ef4444;--amber:#f59e0b}
+*{box-sizing:border-box}
+body{margin:0;padding:14px;background:radial-gradient(circle at 90% 0,rgba(56,189,248,.18),transparent 28%),radial-gradient(circle at 5% 5%,rgba(16,185,129,.12),transparent 24%),var(--bg);font-family:Tajawal,Tahoma;color:var(--text)}
+.container{max-width:920px;margin:auto}
+.topbar{position:sticky;top:10px;z-index:10;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-radius:22px;background:var(--card);border:1px solid var(--line);box-shadow:0 18px 45px rgba(0,0,0,.25);backdrop-filter:blur(12px);margin-bottom:16px}
+.title{font-size:19px;font-weight:900}
+.date-form{display:flex;gap:8px;align-items:center}
+.input,select{width:100%;background:var(--card2);border:1px solid var(--line);border-radius:14px;color:var(--text);padding:12px;font-family:Tajawal;outline:none;margin-bottom:10px}
+.date-form .input{width:160px;margin:0}
+.btn{border:0;border-radius:13px;padding:11px 14px;font-family:Tajawal;font-weight:900;cursor:pointer;color:#fff}
+.btn-blue{background:#2563eb}.btn-green{background:var(--green)}.btn-red{background:var(--red)}.btn-dark{background:#334155}
+.card{background:linear-gradient(180deg,rgba(30,41,59,.96),rgba(15,23,42,.96));border:1px solid var(--line);border-radius:24px;padding:16px;margin-bottom:15px;box-shadow:0 14px 35px rgba(0,0,0,.24)}
+.match-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.team{width:35%;text-align:center}.team img{width:66px;height:66px;object-fit:contain}.team-name{font-weight:900;margin-top:7px;line-height:1.5}
+.center{width:30%;text-align:center}.time{font-size:18px;color:var(--blue);font-weight:900}.score{font-size:25px;font-weight:900}
+.badge{display:inline-flex;align-items:center;justify-content:center;margin-top:8px;border-radius:999px;padding:6px 13px;font-size:13px;font-weight:900}
+.box{margin-top:15px;background:rgba(2,6,23,.38);border:1px solid var(--line);border-radius:20px;padding:14px}
+.section{font-weight:900;margin:8px 0 11px;color:#e0f2fe}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+.servers{margin-top:10px}.server-item{background:rgba(15,23,42,.82);border:1px solid var(--line);border-radius:14px;padding:10px;margin:8px 0;color:var(--muted);font-size:13px;word-break:break-all}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#0f172a;border:1px solid rgba(255,255,255,.15);padding:12px 16px;border-radius:999px;box-shadow:0 14px 45px rgba(0,0,0,.35);display:none;z-index:99}
+.hint{color:var(--muted);font-size:13px;line-height:1.8}.empty{text-align:center;padding:30px;background:var(--card);border:1px solid var(--line);border-radius:22px;color:var(--muted)}
+.manual-panel{display:none;margin-top:12px}.manual-panel.show{display:block}.manual-toggle{width:100%;margin-top:6px;background:#0f766e}
+@media(max-width:700px){.topbar{align-items:stretch;flex-direction:column}.date-form{width:100%}.date-form .input{width:100%}.row{grid-template-columns:1fr}.team img{width:54px;height:54px}.team-name{font-size:13px}.card{padding:12px}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <div>
+      <div class="title">لوحة المسؤول الاحترافية</div>
+      <div class="hint">نسخة HTML: جلب المباريات يتم من JavaScript، ثم حفظ السيرفرات والإرسال إلى Firebase.</div>
+    </div>
+    <form class="date-form" onsubmit="event.preventDefault(); loadMatches();">
+      <input class="input" id="dateInput" type="date">
+      <button class="btn btn-blue">تحديث</button>
+    </form>
+  </div>
+  <div id="matchesRoot"><div class="empty">جاري تحميل المباريات...</div></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script>
+const firebaseConfig={apiKey:"AIzaSyAGhmOqXWxmr2ULOzNMMDuLlxCeTmUNpis",authDomain:"frsin-araq.firebaseapp.com",databaseURL:"https://frsin-araq-default-rtdb.firebaseio.com",projectId:"frsin-araq",storageBucket:"frsin-araq.firebasestorage.app",messagingSenderId:"813355696991",appId:"1:813355696991:web:4a58ec98591210bf77acea"};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.database();
+
+const readyChannels = {
+    "بي إن سبورت 1": [
+        {
+            "label": "1080p",
+            "url": "http://het000.4rouwanda-shop.store/live/918454578001/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "720p",
+            "url": "http://het000.4rouwanda-shop.store/live/918454578001/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "360p",
+            "url": "http://het000.4rouwanda-shop.store/live/978480008877005/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "244p",
+            "url": "http://het000.4rouwanda-shop.store/live/31009988005/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        }
+    ],
+    "بي إن سبورت 2": [
+        {
+            "label": "1080p",
+            "url": "http://het000.4rouwanda-shop.store/live/69854211/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "720p",
+            "url": "http://het000.4rouwanda-shop.store/live/69854211/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "360p",
+            "url": "http://het000.4rouwanda-shop.store/live/10011244/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "244p",
+            "url": "http://het000.4rouwanda-shop.store/live/4798998070/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        }
+    ],
+    "بي إن سبورت 3": [
+        {
+            "label": "1080p",
+            "url": "http://het000.4rouwanda-shop.store/live/645587700/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "720p",
+            "url": "http://het000.4rouwanda-shop.store/live/645587700/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "360p",
+            "url": "http://het000.4rouwanda-shop.store/live/161988840/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "244p",
+            "url": "http://het000.4rouwanda-shop.store/live/551818447/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        }
+    ],
+    "بي إن سبورت 4": [
+        {
+            "label": "1080p",
+            "url": "http://het000.4rouwanda-shop.store/live/9787488847/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "720p",
+            "url": "http://het000.4rouwanda-shop.store/live/9787488847/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "360p",
+            "url": "http://het000.4rouwanda-shop.store/live/0103088847/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "244p",
+            "url": "http://het000.4rouwanda-shop.store/live/131326625/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        }
+    ],
+    "بي إن سبورت 5": [
+        {
+            "label": "1080p",
+            "url": "http://het000.4rouwanda-shop.store/live/610303030/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "720p",
+            "url": "http://het000.4rouwanda-shop.store/live/610303030/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "360p",
+            "url": "http://het000.4rouwanda-shop.store/live/115451004/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "244p",
+            "url": "http://het000.4rouwanda-shop.store/live/181818444/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        }
+    ],
+    "بي إن سبورت 6": [
+        {
+            "label": "1080p",
+            "url": "http://het000.4rouwanda-shop.store/live/1515000000/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "720p",
+            "url": "http://het000.4rouwanda-shop.store/live/1515000000/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "360p",
+            "url": "http://het000.4rouwanda-shop.store/live/788550011/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "244p",
+            "url": "http://het000.4rouwanda-shop.store/live/9883322/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        }
+    ],
+    "بي إن سبورت 7": [
+        {
+            "label": "1080p",
+            "url": "http://het000.4rouwanda-shop.store/live/33523510/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "720p",
+            "url": "http://het000.4rouwanda-shop.store/live/33523510/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "360p",
+            "url": "http://het000.4rouwanda-shop.store/live/14066007/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "244p",
+            "url": "http://het000.4rouwanda-shop.store/live/79247621/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        }
+    ],
+    "بي إن سبورت 8": [
+        {
+            "label": "1080p",
+            "url": "https://het000.4rouwanda-shop.store/live/lb2/bs8-multi.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "720p",
+            "url": "http://het000.4rouwanda-shop.store/live/996251000/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "360p",
+            "url": "http://het000.4rouwanda-shop.store/live/500021000/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "244p",
+            "url": "http://het000.4rouwanda-shop.store/live/770001000/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        }
+    ],
+    "بي إن سبورت 9": [
+        {
+            "label": "1080p",
+            "url": "http://het000.4rouwanda-shop.store/live/34114434/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "720p",
+            "url": "http://het000.4rouwanda-shop.store/live/34114434/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "360p",
+            "url": "http://het000.4rouwanda-shop.store/live/996251000/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        },
+        {
+            "label": "244p",
+            "url": "http://het000.4rouwanda-shop.store/live/500021000/index.m3u8",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "referer": "",
+            "origin": "",
+            "drmKey": ""
+        }
+    ]
+};
+
+function today() {
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+document.getElementById('dateInput').value = today();
+
+function toast(t){const el=document.getElementById('toast');el.textContent=t;el.style.display='block';setTimeout(()=>el.style.display='none',1800)}
+function cardEl(key){return document.getElementById('match-'+key)}
+function safeText(v){return (v ?? '').toString().replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+function getTeamLogo(imgName) {
+  if (!imgName) return 'https://via.placeholder.com/80?text=Team';
+  const newPath = 'https://imgs.ysscores.com/teams/64/' + imgName;
+  return 'https://images.weserv.nl/?url=' + encodeURIComponent(newPath) + '&errorredirect=' + encodeURIComponent('https://images.weserv.nl/?url=https://imgs.ysscores.com/teams/' + imgName);
+}
+function getStatusInfo(status, dateTime) {
+  const now = Date.now();
+  const mTime = Date.parse((dateTime || '').replace(' ', 'T'));
+  if (Number(status) === 4) return {text:'انتهت', bg:'#64748b', order:3};
+  if ([1,2,3].includes(Number(status)) || (mTime && now >= mTime)) return {text:'جارية الآن', bg:'#ef4444', order:1};
+  return {text:'لم تبدأ', bg:'#10b981', order:2};
+}
+function getMatchKey(m) {
+  const raw = ((m.home_team?.title||'home')+'|'+(m.away_team?.title||'away')+'|'+(m.match_date||'')+'|'+(m.match_time||''));
+  let h=0; for(let i=0;i<raw.length;i++){h=((h<<5)-h)+raw.charCodeAt(i); h|=0;}
+  return 'm_' + Math.abs(h);
+}
+function arTime(time) {
+  if(!time) return '00:00';
+  const [hh='0',mm='00'] = time.split(':');
+  let h = parseInt(hh,10);
+  const suffix = h >= 12 ? 'م' : 'ص';
+  h = h % 12 || 12;
+  return h + ':' + mm.padStart(2,'0') + ' ' + suffix;
+}
+function normalizeServer(s){return {label:s.label||'سيرفر',url:s.url||'',userAgent:s.userAgent||'',referer:s.referer||'',origin:s.origin||'',drmKey:s.drmKey||'',playMode:s.playMode||'worker'}}
+function toggleManualPanel(key){const card=cardEl(key);const panel=card.querySelector('.manual-panel');panel.classList.toggle('show');}
+
+function buildCard(m) {
+  const key = getMatchKey(m);
+  const home = m.home_team?.title || '';
+  const away = m.away_team?.title || '';
+  const st = getStatusInfo(m.status || 0, (m.match_date || '') + ' ' + (m.match_time || ''));
+  const matchPayload = {
+    id:key, home, away,
+    homeLogo:getTeamLogo(m.home_team?.image || ''),
+    awayLogo:getTeamLogo(m.away_team?.image || ''),
+    time:m.match_time || '',
+    date:m.match_date || document.getElementById('dateInput').value,
+    statusText: st.text === 'انتهت' ? 'انتهت المباراة' : st.text,
+    statusBg: st.bg,
+    homeScore:m.home_scores || '0',
+    awayScore:m.away_scores || '0',
+    championship:m.championship_name || ''
+  };
+  const channelOptions = Object.keys(readyChannels).map(name=>`<option value="${safeText(name)}">${safeText(name)}</option>`).join('');
+  const centerHtml = st.text === 'لم تبدأ'
+    ? `<div class="time">${arTime(m.match_time || '')}</div>`
+    : `<div class="score">${safeText(m.home_scores || '0')} - ${safeText(m.away_scores || '0')}</div>`;
+  const payload = safeText(JSON.stringify(matchPayload));
+  return `
+  <div class="card" id="match-${key}">
+    <div class="match-head">
+      <div class="team"><img src="${safeText(matchPayload.homeLogo)}"><div class="team-name">${safeText(home)}</div></div>
+      <div class="center">
+        ${centerHtml}
+        <div class="badge" style="background:${st.bg}">${st.text}</div>
+      </div>
+      <div class="team"><img src="${safeText(matchPayload.awayLogo)}"><div class="team-name">${safeText(away)}</div></div>
+    </div>
+    <div class="box">
+      <div class="section">1) اختيار قناة جاهزة</div>
+      <select class="channel-select"><option value="">اختر القناة</option>${channelOptions}</select>
+      <div class="actions"><button class="btn btn-blue" onclick='saveReadyChannel("${key}", JSON.parse(this.dataset.match), this)' data-match='${payload}'>حفظ القناة والجودات</button></div>
+      <button class="btn manual-toggle" type="button" onclick='toggleManualPanel("${key}")'>+ إضافة سيرفر يدوي</button>
+      <div class="manual-panel">
+        <div class="section">إضافة سيرفر يدوي</div>
+        <div class="row">
+          <input class="input manual-label" placeholder="اسم السيرفر / الجودة">
+          <input class="input manual-url" placeholder="رابط السيرفر">
+        </div>
+        <input class="input manual-ua" placeholder="User-Agent">
+        <div class="row">
+          <input class="input manual-referer" placeholder="Referer">
+          <input class="input manual-origin" placeholder="Origin">
+        </div>
+        <input class="input manual-drm" placeholder="Clear Key مثال kid:key">
+        <div class="actions">
+          <button class="btn btn-blue" onclick='addManualServer("${key}", JSON.parse(this.dataset.match), this)' data-match='${payload}'>حفظ السيرفر اليدوي</button>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-green" onclick='publishMatch("${key}", JSON.parse(this.dataset.match))' data-match='${payload}'>إرسال</button>
+        <button class="btn btn-red" onclick='unpublishMatch("${key}")'>إلغاء إرسال</button>
+        <button class="btn btn-dark" onclick='clearServers("${key}")'>حذف السيرفرات</button>
+      </div>
+      <div class="servers" data-key="${key}"><div class="hint">جاري قراءة حالة المباراة من Firebase...</div></div>
+    </div>
+  </div>`;
+}
+
+async function fetchJsonWithFallback(apiUrl){
+  // صفحة HTML المفتوحة كملف مباشر file:/// لا تقدر تجلب YSScores مباشرة بسبب CORS.
+  // لذلك نستخدم AllOrigins تلقائياً، وإذا تعطل نجرب بديل ثاني.
+  const urls = [
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(apiUrl),
+    'https://api.allorigins.win/get?url=' + encodeURIComponent(apiUrl),
+    'https://corsproxy.io/?' + encodeURIComponent(apiUrl)
+  ];
+
+  let lastError = null;
+  for (const url of urls){
+    try{
+      const res = await fetch(url, { method:'GET', cache:'no-store' });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      let data = JSON.parse(text);
+      if(data && data.contents){
+        data = typeof data.contents === 'string' ? JSON.parse(data.contents) : data.contents;
+      }
+      if(data && Array.isArray(data.data)) return data;
+      throw new Error('الرد وصل لكن بدون data');
+    }catch(err){
+      lastError = err;
+      console.warn('فشل رابط الجلب:', url, err);
+    }
+  }
+  throw lastError || new Error('فشل الجلب');
+}
+
+
+async function loadMatches() {
+  const root = document.getElementById('matchesRoot');
+  root.innerHTML = '<div class="empty">جاري تحميل المباريات...</div>';
+  const selectedDate = document.getElementById('dateInput').value || today();
+  const apiUrl = `https://api-ar.ysscores.com/api/matches/matches_date_get/${selectedDate}/%5B%2299376%22,%22408340%22%5D/%5B%5D/%5B%228633%22%5D/IBA/180`;
+  try {
+    const data = await fetchJsonWithFallback(apiUrl);
+    const matches = data.data || [];
+    matches.sort((a,b)=>getStatusInfo(a.status,(a.match_date||'')+' '+(a.match_time||'')).order - getStatusInfo(b.status,(b.match_date||'')+' '+(b.match_time||'')).order);
+    if(!matches.length) {
+      root.innerHTML = '<div class="empty">لا توجد مباريات لهذا اليوم.</div>';
+      return;
+    }
+    root.innerHTML = matches.map(buildCard).join('');
+    attachFirebaseListeners();
+  } catch(e) {
+    root.innerHTML = `<div class="empty">تعذر جلب المباريات من كل روابط التوصيل. جرّب رفع الملف على GitHub Pages أو استخدم Cloudflare Worker وسيط إذا كان AllOrigins متوقف.<br><br>الخطأ: ${safeText(e.message || e)}</div>`;
+    console.error(e);
+  }
+}
+
+async function getCurrent(key){const snap=await db.ref('matches/'+key).once('value');return snap.val()||{};}
+async function saveReadyChannel(key, match, btn){
+  const card=cardEl(key);
+  const name=card.querySelector('.channel-select').value;
+  if(!name||!readyChannels[name]) return toast('اختر قناة أولا');
+  const newServers=readyChannels[name].map(normalizeServer).filter(s=>s.url);
+  const cur=await getCurrent(key);
+  const oldList=Array.isArray(cur.servers)?cur.servers:(Array.isArray(cur.qualities)?cur.qualities:[]);
+  const finalList=[...oldList,...newServers];
+  await db.ref('matches/'+key).set({...cur,...match,selectedChannel:name,qualities:finalList,servers:finalList,updatedAt:Date.now()});
+  toast('تم حفظ القناة والجودات');
+}
+async function addManualServer(key, match, btn){
+  const card=cardEl(key);
+  const server={
+    label:card.querySelector('.manual-label').value.trim()||'سيرفر يدوي',
+    url:card.querySelector('.manual-url').value.trim(),
+    userAgent:card.querySelector('.manual-ua').value.trim(),
+    referer:card.querySelector('.manual-referer').value.trim(),
+    origin:card.querySelector('.manual-origin').value.trim(),
+    drmKey:card.querySelector('.manual-drm').value.trim(),
+    playMode:'direct'
+  };
+  if(!server.url) return toast('اكتب رابط السيرفر');
+  const cur=await getCurrent(key);
+  const list=Array.isArray(cur.servers)?cur.servers:(Array.isArray(cur.qualities)?cur.qualities:[]);
+  list.push(server);
+  await db.ref('matches/'+key).set({...cur,...match,qualities:list,servers:list,updatedAt:Date.now()});
+  card.querySelectorAll('.manual-label,.manual-url,.manual-ua,.manual-referer,.manual-origin,.manual-drm').forEach(i=>i.value='');
+  toast('تمت إضافة السيرفر');
+}
+async function publishMatch(key, match){
+  const cur=await getCurrent(key);
+  const list=Array.isArray(cur.servers)?cur.servers:(Array.isArray(cur.qualities)?cur.qualities:[]);
+  await db.ref('matches/'+key).set({...cur,...match,qualities:list,servers:list,published:true,isPublished:true,updatedAt:Date.now()});
+  toast(list.length ? 'تم إرسال المباراة للمستخدم' : 'تم إرسال المباراة بدون سيرفرات');
+}
+async function unpublishMatch(key){await db.ref('matches/'+key).update({published:false,isPublished:false,updatedAt:Date.now()}); toast('تم إلغاء إرسال المباراة من المستخدم');}
+async function clearServers(key){
+  await db.ref('matches/'+key+'/qualities').set([]);
+  await db.ref('matches/'+key+'/servers').set([]);
+  await db.ref('matches/'+key+'/selectedChannel').set('');
+  await db.ref('matches/'+key).update({published:false,isPublished:false,updatedAt:Date.now()});
+  toast('تم حذف السيرفرات وإلغاء إرسال المباراة');
+}
+function renderState(key,data){
+  const box=document.querySelector('.servers[data-key="'+key+'"]'); if(!box)return;
+  const list=Array.isArray(data?.servers)?data.servers:(Array.isArray(data?.qualities)?data.qualities:[]);
+  let html=`<div class="hint">الحالة: <b style="color:${data?.published?'#10b981':'#94a3b8'}">${data?.published?'مرسلة':'غير مرسلة'}</b> ${data?.selectedChannel?' | القناة: '+safeText(data.selectedChannel):''}</div>`;
+  if(!list.length) html += '<div class="hint">لا توجد سيرفرات لهذه المباراة.</div>';
+  list.forEach((s,i)=>{html += `<div class="server-item"><b>${i+1}. ${safeText(s.label||'سيرفر')}</b><br>${safeText(s.url||'')}${s.userAgent?'<br>User-Agent موجود':''}${s.referer?'<br>Referer: '+safeText(s.referer):''}${s.origin?'<br>Origin: '+safeText(s.origin):''}${s.drmKey?'<br>ClearKey موجود':''}${s.playMode==='direct'?'<br>تشغيل مباشر احتياطي':''}</div>`});
+  box.innerHTML=html;
+}
+function attachFirebaseListeners(){
+  document.querySelectorAll('.servers[data-key]').forEach(box=>{const key=box.dataset.key; db.ref('matches/'+key).on('value',snap=>renderState(key,snap.val()||{}));});
+}
+loadMatches();
+</script>
+</body>
+</html>
