@@ -40,7 +40,7 @@ body{margin:0;padding:14px;background:radial-gradient(circle at 90% 0,rgba(56,18
     </div>
     <form class="date-form" onsubmit="event.preventDefault(); loadMatches();">
       <input class="input" id="dateInput" type="date">
-      <button class="btn btn-blue">تحديث</button>
+      <button class="btn btn-blue">جلب مباريات اليوم</button>
     </form>
   </div>
   <div id="matchesRoot"><div class="empty">جاري تحميل المباريات...</div></div>
@@ -365,10 +365,27 @@ const readyChannels = {
 };
 
 function today() {
+  // تاريخ اليوم حسب توقيت بغداد/الرياض حتى لا يتغير بسبب UTC
   const d = new Date();
-  return d.toISOString().slice(0,10);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Baghdad',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(d);
+  const y = parts.find(p => p.type === 'year').value;
+  const m = parts.find(p => p.type === 'month').value;
+  const day = parts.find(p => p.type === 'day').value;
+  return `${y}-${m}-${day}`;
 }
-document.getElementById('dateInput').value = today();
+
+function forceTodayDate() {
+  const input = document.getElementById('dateInput');
+  input.value = today();
+  return input.value;
+}
+
+forceTodayDate();
 
 function toast(t){const el=document.getElementById('toast');el.textContent=t;el.style.display='block';setTimeout(()=>el.style.display='none',1800)}
 function cardEl(key){return document.getElementById('match-'+key)}
@@ -464,25 +481,54 @@ function buildCard(m) {
   </div>`;
 }
 
+async function fetchJsonWithFallback(apiUrl){
+  // صفحة HTML المفتوحة كملف مباشر file:/// لا تقدر تجلب YSScores مباشرة بسبب CORS.
+  // لذلك نستخدم AllOrigins تلقائياً، وإذا تعطل نجرب بديل ثاني.
+  const urls = [
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(apiUrl),
+    'https://api.allorigins.win/get?url=' + encodeURIComponent(apiUrl),
+    'https://corsproxy.io/?' + encodeURIComponent(apiUrl)
+  ];
+
+  let lastError = null;
+  for (const url of urls){
+    try{
+      const res = await fetch(url, { method:'GET', cache:'no-store' });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      let data = JSON.parse(text);
+      if(data && data.contents){
+        data = typeof data.contents === 'string' ? JSON.parse(data.contents) : data.contents;
+      }
+      if(data && Array.isArray(data.data)) return data;
+      throw new Error('الرد وصل لكن بدون data');
+    }catch(err){
+      lastError = err;
+      console.warn('فشل رابط الجلب:', url, err);
+    }
+  }
+  throw lastError || new Error('فشل الجلب');
+}
+
+
 async function loadMatches() {
   const root = document.getElementById('matchesRoot');
   root.innerHTML = '<div class="empty">جاري تحميل المباريات...</div>';
-  const selectedDate = document.getElementById('dateInput').value || today();
+  // دائماً يجلب مباريات تاريخ اليوم من API
+  const selectedDate = forceTodayDate();
   const apiUrl = `https://api-ar.ysscores.com/api/matches/matches_date_get/${selectedDate}/%5B%2299376%22,%22408340%22%5D/%5B%5D/%5B%228633%22%5D/IBA/180`;
   try {
-    const res = await fetch(apiUrl, {headers: {'Accept':'application/json'}});
-    if(!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
+    const data = await fetchJsonWithFallback(apiUrl);
     const matches = data.data || [];
     matches.sort((a,b)=>getStatusInfo(a.status,(a.match_date||'')+' '+(a.match_time||'')).order - getStatusInfo(b.status,(b.match_date||'')+' '+(b.match_time||'')).order);
     if(!matches.length) {
-      root.innerHTML = '<div class="empty">لا توجد مباريات لهذا اليوم أو فشل جلب البيانات.</div>';
+      root.innerHTML = '<div class="empty">لا توجد مباريات لهذا اليوم.</div>';
       return;
     }
     root.innerHTML = matches.map(buildCard).join('');
     attachFirebaseListeners();
   } catch(e) {
-    root.innerHTML = '<div class="empty">تعذر جلب المباريات من API مباشرة. إذا ظهرت مشكلة CORS، تحتاج تشغيل الصفحة على استضافة تدعم الجلب أو استخدام Worker وسيط.</div>';
+    root.innerHTML = `<div class="empty">تعذر جلب المباريات من كل روابط التوصيل. جرّب رفع الملف على GitHub Pages أو استخدم Cloudflare Worker وسيط إذا كان AllOrigins متوقف.<br><br>الخطأ: ${safeText(e.message || e)}</div>`;
     console.error(e);
   }
 }
